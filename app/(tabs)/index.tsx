@@ -62,7 +62,12 @@ export default function HomePage() {
           <TWButton
             title="Đăng nhập"
             variant="ghost"
-            onPress={() => router.push("/(auth)/login" as Href)}
+            onPress={() => router.push("/(auth)/signin" as Href)}
+          />
+          <TWButton
+            title="Đăng ký"
+            variant="ghost"
+            onPress={() => router.push("/(auth)/signup" as Href)}
           />
         </View>
       </ScrollView>
