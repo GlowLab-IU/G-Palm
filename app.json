@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "coffee-4c",
-    "slug": "coffee-4c",
+    "name": "repo-base-rn-4c",
+    "slug": "repo-base-rn-4c",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "coffee-4c",
+    "scheme": "repo-base-rn-4c",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
