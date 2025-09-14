@@ -6,7 +6,7 @@ const Layout = () => {
   return (
     <Tabs>
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: "Home",
           headerShown: false,
@@ -17,46 +17,16 @@ const Layout = () => {
       />
 
       <Tabs.Screen
-        name="dashboard"
+        name="camera"
         options={{
-          title: "Dashboard",
+          title: "Camera",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <AntDesign name="dashboard" color={color} size={size} />
+            <AntDesign name="camera" color={color} size={size} />
           ),
         }}
       />
 
-      <Tabs.Screen
-        name="supplies"
-        options={{
-          title: "Supplies",
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <AntDesign name="shopping-cart" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="guide"
-        options={{
-          title: "Guide",
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <AntDesign name="book" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="report"
-        options={{
-          title: "Report",
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <AntDesign name="file" color={color} size={size} />
-          ),
-        }}
-      />
       <Tabs.Screen
         name="profile"
         options={{

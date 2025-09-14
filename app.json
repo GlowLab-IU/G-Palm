@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "plugins": ["expo-camera"],
+      "supportsTablet": true,
+      "infoPlist": {
+      "NSCameraUsageDescription": "We use the camera to capture your face for analysis.",
+      "NSPhotoLibraryUsageDescription": "Allow picking photos for analysis."
+    }
     },
     "android": {
       "adaptiveIcon": {
