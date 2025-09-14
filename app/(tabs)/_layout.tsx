@@ -1,7 +1,6 @@
-import React from "react";
-import _layout from "../_layout";
-import { Tabs } from "expo-router";
 import { AntDesign } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import React from "react";
 
 const Layout = () => {
   return (
@@ -34,7 +33,7 @@ const Layout = () => {
           title: "Supplies",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <AntDesign name="shoppingcart" color={color} size={size} />
+            <AntDesign name="shopping-cart" color={color} size={size} />
           ),
         }}
       />
@@ -54,7 +53,7 @@ const Layout = () => {
           title: "Report",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <AntDesign name="filetext1" color={color} size={size} />
+            <AntDesign name="file" color={color} size={size} />
           ),
         }}
       />
