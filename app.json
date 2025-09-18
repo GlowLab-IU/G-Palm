@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "repo-base-rn-4c",
-    "slug": "repo-base-rn-4c",
+    "name": "Palm Tree Counter",
+    "slug": "palm-tree-counter",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "repo-base-rn-4c",
+    "scheme": "palm-tree-counter",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

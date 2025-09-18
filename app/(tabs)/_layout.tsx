@@ -1,4 +1,4 @@
-import { AntDesign } from "@expo/vector-icons";
+import { AntDesign, Foundation, MaterialIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 
@@ -17,12 +17,22 @@ const Layout = () => {
       />
 
       <Tabs.Screen
-        name="camera"
+        name="maps"
         options={{
-          title: "Camera",
+          title: "Maps",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <AntDesign name="camera" color={color} size={size} />
+            <Foundation name="map" color="#000" size={24} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="result"
+        options={{
+          title: "Result",
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="storage" color="#000" size={24} />
           ),
         }}
       />
