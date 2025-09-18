@@ -1,9 +1,12 @@
+// app/(analysis)/face-camera.tsx
+import { uploadImage } from "@/lib/upload";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Platform,
@@ -24,6 +27,7 @@ export default function FaceCamera() {
   const [perm, requestPerm] = useCameraPermissions();
   const [ready, setReady] = useState(false);
   const [facing, setFacing] = useState<CameraType>("front");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -32,6 +36,24 @@ export default function FaceCamera() {
     })();
   }, []);
 
+  async function handleAfterPick(uri: string) {
+    try {
+      setLoading(true);
+      const result = await uploadImage(uri);
+      setLoading(false);
+      router.push({
+        pathname: "/(analysis)/result",
+        params: {
+          uri,
+          payload: JSON.stringify(result), // truyền data sang trang kết quả
+        },
+      });
+    } catch (e: any) {
+      setLoading(false);
+      Alert.alert("Upload thất bại", e?.message ?? "Unknown error");
+    }
+  }
+
   const capture = async () => {
     try {
       if (!camRef.current || !ready) return;
@@ -39,12 +61,7 @@ export default function FaceCamera() {
         quality: 1,
         skipProcessing: Platform.OS === "android",
       });
-      if (photo?.uri) {
-        router.push({
-          pathname: "/(analysis)/result",
-          params: { uri: photo.uri, source: "camera" },
-        });
-      }
+      if (photo?.uri) await handleAfterPick(photo.uri);
     } catch (e: any) {
       Alert.alert("Lỗi chụp ảnh", e?.message ?? "Unknown");
     }
@@ -58,10 +75,7 @@ export default function FaceCamera() {
       quality: 1,
     });
     if (!res.canceled && res.assets?.[0]?.uri) {
-      router.push({
-        pathname: "/(analysis)/result",
-        params: { uri: res.assets[0].uri, source: "gallery" },
-      });
+      await handleAfterPick(res.assets[0].uri);
     }
   };
 
@@ -73,18 +87,14 @@ export default function FaceCamera() {
       <View className="px-4 pt-1 pb-3 flex-row items-center justify-between">
         <Pressable
           onPress={() => router.back()}
-          className="w-20 h-20 rounded-full border border-white/50 items-center justify-center"
+          className="w-10 h-10 rounded-full border border-gray-300 items-center justify-center"
         >
-          <Ionicons name="chevron-back" size={28} />
+          <Ionicons name="chevron-back" size={20} />
         </Pressable>
-        <Text className="text-black text-lg font-semibold">Face Analysis</Text>
-        <Pressable
-          className="w-20 h-20 rounded-full border border-white/50 items-center justify-center"
-          onPress={() => router.push("/(policy)/guide")}
-        >
-          <Ionicons name="help-circle" size={28} />
-        </Pressable>
+        <Text className="text-base font-semibold">Face Analysis</Text>
+        <View className="w-10" />
       </View>
+
       {!perm.granted ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text className="mb-3 text-center">
@@ -99,7 +109,7 @@ export default function FaceCamera() {
         </View>
       ) : (
         <>
-          {/* CameraView + overlays */}
+          {/* Camera preview */}
           <View
             style={{
               height: CAM_H,
@@ -119,7 +129,7 @@ export default function FaceCamera() {
               key={facing}
             />
 
-            {/* Badge hướng dẫn */}
+            {/* Hướng dẫn + khung oval */}
             <View
               style={{
                 position: "absolute",
@@ -135,15 +145,14 @@ export default function FaceCamera() {
                 Đặt khuôn mặt vào khung
               </Text>
             </View>
-
             <View
               pointerEvents="none"
               style={{
                 position: "absolute",
-                top: 48,
+                top: 24,
                 alignSelf: "center",
                 width: BOX_W * 0.7,
-                height: BOX_W * 1,
+                height: BOX_W * 1.0,
                 borderWidth: 3,
                 borderStyle: "dashed",
                 borderColor: "rgba(255,255,255,0.9)",
@@ -164,12 +173,12 @@ export default function FaceCamera() {
 
             <Pressable
               onPress={capture}
-              disabled={!ready}
+              disabled={!ready || loading}
               className="w-20 h-20 rounded-full items-center justify-center"
               style={{
                 borderWidth: 6,
                 borderColor: "#111",
-                opacity: ready ? 1 : 0.4,
+                opacity: ready && !loading ? 1 : 0.4,
               }}
             >
               <View className="w-14 h-14 rounded-full bg-black" />
@@ -185,6 +194,23 @@ export default function FaceCamera() {
               <Text className="text-xs mt-1">Flip</Text>
             </Pressable>
           </View>
+
+          {loading && (
+            <View
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(0,0,0,0.25)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              pointerEvents="none"
+            >
+              <ActivityIndicator size="large" />
+              <Text style={{ marginTop: 8, color: "#111" }}>
+                Đang phân tích…
+              </Text>
+            </View>
+          )}
         </>
       )}
     </SafeAreaView>

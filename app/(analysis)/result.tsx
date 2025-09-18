@@ -2,224 +2,233 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
-  Alert,
   Dimensions,
   Image,
   Pressable,
   ScrollView,
-  Share,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Trait = { title: string; desc: string; score: number; color?: string };
-
-function TraitRow({ t }: { t: Trait }) {
-  return (
-    <View className="mb-3 rounded-2xl border border-gray-200 bg-white px-4 py-3">
-      <Text className="font-semibold">{t.title}</Text>
-      <Text className="text-gray-600 mt-0.5">{t.desc}</Text>
-      <View className="mt-2 flex-row items-center">
-        <View className="flex-1 h-3 rounded-full bg-gray-200 overflow-hidden mr-3">
-          <View
-            style={{
-              width: `${t.score}%`,
-              height: "100%",
-              backgroundColor: t.color || "#16a34a",
-              borderRadius: 999,
-            }}
-          />
-        </View>
-        <Text className="text-gray-700">{t.score}%</Text>
-      </View>
-    </View>
-  );
-}
-
-function Pill({ title, value }: { title: string; value: string }) {
-  return (
-    <View className="flex-1 mr-3 mb-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <Text className="text-gray-600 text-xs">{title}</Text>
-      <Text className="mt-1 font-medium">{value}</Text>
-    </View>
-  );
-}
-
 const W = Dimensions.get("window").width;
-const BOX_W = W - 32;
-const CAM_H = BOX_W * 1.25;
+const BOX_W = W - 64;
 
-export default function ResultPage() {
+export default function Result() {
   const router = useRouter();
-  const { uri = "" } = useLocalSearchParams<{ uri?: string }>();
+  const { uri, payload } = useLocalSearchParams<{
+    uri?: string;
+    payload?: string;
+  }>();
 
-  const traits: Trait[] = useMemo(
-    () => [
-      {
-        title: "Leadership",
-        desc: "Strong leadership qualities detected",
-        score: 85,
-      },
-      {
-        title: "Creativity",
-        desc: "High creative potential indicated",
-        score: 72,
-        color: "#f59e0b",
-      },
-      {
-        title: "Analytical",
-        desc: "Strong analytical thinking patterns",
-        score: 90,
-      },
-    ],
-    []
-  );
-
-  const shareIt = async () => {
+  // parse API result nếu có, còn chưa thì mock
+  const apiData = useMemo(() => {
     try {
-      await Share.share({
-        message: "My AI Face Analysis result",
-        url: typeof uri === "string" ? uri : undefined,
-      });
+      return payload ? JSON.parse(payload as string) : null;
     } catch {
-      Alert.alert("Share failed");
+      return null;
     }
+  }, [payload]);
+
+  // mock traits nếu chưa có data
+  const traits = apiData?.traits || [
+    {
+      label: "Leadership",
+      desc: "Strong leadership qualities detected",
+      score: 85,
+    },
+    {
+      label: "Creativity",
+      desc: "High creative potential indicated",
+      score: 72,
+    },
+    {
+      label: "Analytical",
+      desc: "Strong analytical thinking patterns",
+      score: 90,
+    },
+  ];
+
+  const keyFeatures = apiData?.features || {
+    faceShape: "Oval",
+    eyeShape: "Almond",
+    noseType: "Straight",
+    jawline: "Defined",
   };
+
+  const overall = apiData?.overallScore ?? 82;
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Header */}
-      <View className="px-4 pt-1 pb-3 flex-row items-center">
+      <View className="px-4 pt-1 pb-3 flex-row items-center justify-between">
         <Pressable
           onPress={() => router.back()}
-          className="w-10 h-10 rounded-full border border-gray-300 items-center justify-center mr-3"
+          className="w-10 h-10 rounded-full border border-gray-300 items-center justify-center"
         >
           <Ionicons name="chevron-back" size={20} />
         </Pressable>
-        <Text className="text-xl font-semibold">Face Analysis Results</Text>
+        <Text className="text-base font-semibold">Face Analysis Results</Text>
+        <View className="w-10" />
       </View>
 
-      {/* SCROLLABLE CONTENT */}
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Preview card */}
-        <View className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 mb-5">
-          <View className="items-end">
-            <View className="px-3 py-1 rounded-full bg-green-600">
-              <Text className="text-white text-xs font-semibold">
-                High Quality
-              </Text>
-            </View>
+        {/* Image + khung oval */}
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 20,
+            borderRadius: 16,
+            backgroundColor: "#f8f8f8",
+            padding: 16,
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              width: BOX_W * 0.7,
+              height: BOX_W * 1.0,
+              borderWidth: 2,
+              borderStyle: "dashed",
+              borderColor: "#999",
+              borderRadius: BOX_W,
+              overflow: "hidden",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {uri ? (
+              <Image
+                source={{ uri }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text className="text-gray-400">SCANNED FACE</Text>
+            )}
           </View>
 
           <View
             style={{
-              marginBottom: 20,
-              marginHorizontal: 16,
-              height: CAM_H,
-              borderRadius: 16,
-              overflow: "hidden",
-              position: "relative",
-              backgroundColor: "#000",
+              marginTop: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              backgroundColor: "#22c55e",
+              borderRadius: 8,
             }}
           >
-            {typeof uri === "string" ? (
-              <Image
-                source={{ uri }}
-                style={StyleSheet.absoluteFillObject}
-                resizeMode="cover"
-              />
-            ) : null}
-            <View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                top: 24,
-                alignSelf: "center",
-                width: BOX_W * 0.7,
-                height: BOX_W * 1.0,
-                borderWidth: 3,
-                borderStyle: "dashed",
-                borderColor: "rgba(255,255,255,0.9)",
-                borderRadius: BOX_W,
-              }}
-            />
-            <Text
-              style={{
-                position: "absolute",
-                alignSelf: "center",
-                top: CAM_H / 2 - 10,
-                color: "#fff",
-                fontWeight: "600",
-              }}
-            >
-              SCANNED FACE
+            <Text className="text-white font-semibold text-sm">
+              High Quality
             </Text>
           </View>
-
-          <Text className="text-center text-gray-600">SCANNED FACE</Text>
         </View>
 
-        {/* Analysis Results */}
-        <Text className="text-2xl font-extrabold mb-2">Analysis Results</Text>
-        <Text className="text-base font-semibold mb-2">Personality Traits</Text>
-        {traits.map((t) => (
-          <TraitRow key={t.title} t={t} />
-        ))}
+        {/* Traits */}
+        <View className="px-5">
+          <Text className="font-bold text-lg mb-3">Analysis Results</Text>
+          <Text className="font-semibold mb-2">Personality Traits</Text>
 
-        {/* Key Features */}
-        <Text className="text-base font-semibold mt-2 mb-2">Key Features</Text>
-        <View className="flex-row flex-wrap -mr-3">
-          <Pill title="Face Shape" value="Oval" />
-          <Pill title="Eye Shape" value="Almond" />
-          <Pill title="Nose Type" value="Straight" />
-          <Pill title="Jawline" value="Defined" />
+          {traits.map(
+            (t: { label: string; desc: string; score: number }, i: number) => (
+              <View
+                key={i}
+                className="bg-white mb-3 p-4 rounded-xl border border-gray-200"
+              >
+                <View className="flex-row justify-between mb-1">
+                  <Text className="font-semibold">{t.label}</Text>
+                  <Text className="font-semibold text-gray-700">
+                    {t.score}%
+                  </Text>
+                </View>
+                <Text className="text-gray-500 text-sm mb-2">{t.desc}</Text>
+                <View className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <View
+                    style={{
+                      width: `${t.score}%`,
+                      height: "100%",
+                      backgroundColor: t.score > 80 ? "#22c55e" : "#f59e0b",
+                    }}
+                  />
+                </View>
+              </View>
+            )
+          )}
         </View>
 
-        {/* Overall Score */}
-        <View className="mt-3 rounded-2xl border border-gray-300 bg-gray-100 px-4 py-4 items-center">
-          <Text className="font-semibold">Overall Analysis Score</Text>
-          <Text
-            className="text-3xl mt-1 font-extrabold"
-            style={{ color: "#16a34a" }}
-          >
-            82%
+        {/* Features */}
+        <View className="px-5 mt-4">
+          <Text className="font-semibold mb-2">Key Features</Text>
+          <View className="flex-row flex-wrap gap-3">
+            <View className="flex-1 bg-gray-100 p-3 rounded-lg">
+              <Text className="text-xs text-gray-500">Face Shape</Text>
+              <Text className="font-semibold">{keyFeatures.faceShape}</Text>
+            </View>
+            <View className="flex-1 bg-gray-100 p-3 rounded-lg">
+              <Text className="text-xs text-gray-500">Eye Shape</Text>
+              <Text className="font-semibold">{keyFeatures.eyeShape}</Text>
+            </View>
+            <View className="flex-1 bg-gray-100 p-3 rounded-lg">
+              <Text className="text-xs text-gray-500">Nose Type</Text>
+              <Text className="font-semibold">{keyFeatures.noseType}</Text>
+            </View>
+            <View className="flex-1 bg-gray-100 p-3 rounded-lg">
+              <Text className="text-xs text-gray-500">Jawline</Text>
+              <Text className="font-semibold">{keyFeatures.jawline}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Overall */}
+        <View
+          style={{
+            marginTop: 24,
+            marginHorizontal: 16,
+            padding: 16,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: "#ddd",
+            alignItems: "center",
+          }}
+        >
+          <Text className="font-semibold text-gray-600">
+            Overall Analysis Score
+          </Text>
+          <Text className="text-2xl font-bold text-green-600 mt-1">
+            {overall}%
           </Text>
         </View>
 
         {/* Actions */}
-        <View className="mt-4 flex-row">
+        <View className="flex-row justify-around mt-6 px-6">
           <Pressable
-            onPress={() => Alert.alert("Saved")}
-            className="flex-1 h-14 rounded-full bg-black items-center justify-center mr-3"
+            className="flex-1 mr-3 h-12 rounded-full bg-black items-center justify-center"
+            onPress={() => {}}
           >
             <Text className="text-white font-semibold">Save Results</Text>
           </Pressable>
           <Pressable
-            onPress={shareIt}
-            className="flex-1 h-14 rounded-full border border-gray-300 bg-white items-center justify-center"
+            className="flex-1 h-12 rounded-full border border-gray-300 items-center justify-center"
+            onPress={() => {}}
           >
             <Text className="font-semibold">Share</Text>
           </Pressable>
         </View>
 
-        <View className="mt-3 flex-row">
+        <View className="flex-row justify-around mt-4 px-6">
           <Pressable
+            className="flex-1 mr-3 h-12 rounded-full border border-gray-300 items-center justify-center"
             onPress={() => router.back()}
-            className="flex-1 h-12 rounded-full border border-gray-300 bg-white items-center justify-center mr-3"
           >
-            <Text>Retake Scan</Text>
+            <Text className="font-semibold">Retake Scan</Text>
           </Pressable>
           <Pressable
-            onPress={() => Alert.alert("Coming soon")}
-            className="flex-1 h-12 rounded-full border border-gray-300 bg-white items-center justify-center"
+            className="flex-1 h-12 rounded-full border border-gray-300 items-center justify-center"
+            onPress={() => {}}
           >
-            <Text>View Details</Text>
+            <Text className="font-semibold">View Details</Text>
           </Pressable>
         </View>
       </ScrollView>

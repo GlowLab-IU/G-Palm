@@ -1,33 +1,77 @@
 // app/(home)/guide.tsx
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type StepProps = {
-  num: number;
+type Step = {
+  stepNumber: string;
   title: string;
-  desc: string;
+  description: string;
+  imageUrl: string;
 };
 
-function Step({ num, title, desc }: StepProps) {
+const steps: Step[] = [
+  {
+    stepNumber: "1",
+    title: "Take a selfie",
+    description:
+      "Let’s smile confidently! Make sure your full face is in the camera's view.",
+    imageUrl:
+      "https://res.cloudinary.com/dwljkfseh/image/upload/v1730726946/462565387_468666096227004_4830643068285312997_n_mkipuw.png",
+  },
+  {
+    stepNumber: "2",
+    title: "Facial Area Selection",
+    description:
+      "We will analyze your facial skin area and display it for review. Please ensure this is the region where you'd like the acne diagnostic process to be conducted.",
+    imageUrl:
+      "https://res.cloudinary.com/dwljkfseh/image/upload/v1730742920/af_b4eazo.png",
+  },
+  {
+    stepNumber: "3",
+    title: "Acne Treatment Solutions",
+    description:
+      "Our specialized intensive treatment targets each acne-causing factor, providing comprehensive information to help you maintain complete skin health.",
+    imageUrl:
+      "https://res.cloudinary.com/dwljkfseh/image/upload/v1730742462/cbecb0e7484d6bd604487c5bd504e3db_hjqi4q.jpg",
+  },
+  {
+    stepNumber: "4",
+    title: "Expert Care for Acne",
+    description:
+      "Dermatology specialists and acne treatment experts will deliver personalized, advanced treatment sessions tailored to individual skin needs, addressing specific issues like acne, scarring, and skin texture for optimal results.",
+    imageUrl:
+      "https://res.cloudinary.com/dwljkfseh/image/upload/v1730804496/dotor_qcvkn1.png",
+  },
+];
+
+function StepCard({ s }: { s: Step }) {
   return (
-    <View className="mb-8">
-      <Text className="text-center text-gray-500 mb-2 font-semibold">
-        Step {num}
-      </Text>
-      <View className="flex-row items-center mb-2">
-        <View className="w-6 h-6 rounded-full bg-black items-center justify-center mr-2">
-          <Text className="text-white text-xs font-bold">{num}</Text>
-        </View>
-        <Text className="font-semibold">{title}</Text>
+    <View className="mb-10">
+      {/* Step label */}
+      <View className="flex-row items-center justify-center mb-3 px-4">
+        <View className="flex-1 h-px bg-gray-300" />
+        <Text className="mx-3 font-semibold text-gray-600">
+          Step {s.stepNumber}
+        </Text>
+        <View className="flex-1 h-px bg-gray-300" />
       </View>
-      <View className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-10 mb-3 items-center justify-center">
-        <Text className="text-gray-400 text-center">{desc}</Text>
+
+      {/* Card */}
+      <View className="mx-4 rounded-2xl border border-gray-300 bg-white p-4">
+        <Image
+          source={{ uri: s.imageUrl }}
+          className="w-full h-40 rounded-xl mb-3"
+          resizeMode="cover"
+        />
+        <Text className="text-lg font-semibold text-center">{s.title}</Text>
+        <Text className="text-gray-600 mt-2 text-center">{s.description}</Text>
+
+        <Pressable className="self-center mt-4 h-10 px-6 rounded-full bg-black items-center justify-center">
+          <Text className="text-white font-semibold">View Details</Text>
+        </Pressable>
       </View>
-      <Pressable className="self-center h-10 px-6 rounded-full bg-black items-center justify-center">
-        <Text className="text-white font-semibold">View Details</Text>
-      </Pressable>
     </View>
   );
 }
@@ -50,33 +94,19 @@ export default function GuidePage() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="mb-6 py-3 bg-gray-100 rounded-xl">
-          <Text className="text-center text-xl font-extrabold">USER GUIDE</Text>
+        {/* Title banner */}
+        <View className="mx-4 mb-6 rounded-xl bg-gray-100 py-4">
+          <Text className="text-center text-2xl font-extrabold">
+            User Guide
+          </Text>
         </View>
 
-        <Step
-          num={1}
-          title="Take a selfie"
-          desc="[SELFIE IMAGE]\nPerson taking selfie with phone camera"
-        />
-        <Step
-          num={2}
-          title="Facial Area Selection"
-          desc="[FACE ANALYSIS]\nFacial area selection and detection interface"
-        />
-        <Step
-          num={3}
-          title="AI Analysis Results"
-          desc="[AI ANALYSIS]\nPhysiognomy analysis results and insights"
-        />
-        <Step
-          num={4}
-          title="Expert Consultation"
-          desc="[EXPERT CONSULTATION]\nProfessional physiognomy expert consultation"
-        />
+        {steps.map((s) => (
+          <StepCard key={s.stepNumber} s={s} />
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
