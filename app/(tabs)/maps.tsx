@@ -1,79 +1,79 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { PixelRatio, Pressable, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import MapView, {
   LatLng,
   Marker,
   Polygon,
   PROVIDER_GOOGLE,
+  Region,
 } from "react-native-maps";
-import Svg, {
-  ClipPath,
-  Defs,
-  Rect,
-  Image as SvgImage,
-  Polygon as SvgPolygon,
-} from "react-native-svg";
-import ViewShot, { captureRef } from "react-native-view-shot";
+import ViewShot from "react-native-view-shot";
 
-const ARABIA_DEFAULT = {
-  latitude: 25.383,
-  longitude: 49.588,
-  latitudeDelta: 0.25,
-  longitudeDelta: 0.25,
+const TARGET = 1024; // >= 640
+const PAD = 1.15; // nới vùng chụp
+const R = 6378137; // bán kính WGS84 (m)
+
+// region vuông bao đa giác
+function toSquareRegion(points: LatLng[]): Region {
+  const lats = points.map((p) => p.latitude);
+  const lngs = points.map((p) => p.longitude);
+  const minLat = Math.min(...lats),
+    maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs),
+    maxLng = Math.max(...lngs);
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  const side = Math.max(maxLat - minLat, maxLng - minLng) * PAD || 0.001;
+  return {
+    latitude: centerLat,
+    longitude: centerLng,
+    latitudeDelta: side,
+    longitudeDelta: side,
+  };
+}
+
+// Web Mercator (m)
+const toMerc = (p: LatLng) => {
+  const x = (p.longitude * Math.PI) / 180;
+  const yRad = (p.latitude * Math.PI) / 180;
+  const y = Math.log(Math.tan(Math.PI / 4 + yRad / 2));
+  return { x: R * x, y: R * y };
 };
-const EXPORT = { w: 224, h: 224 };
+// Diện tích đa giác (m²) theo shoelace trên mặt phẳng Mercator
+function areaSqm(points: LatLng[]): number {
+  const ps = points.map(toMerc);
+  let s = 0;
+  for (let i = 0; i < ps.length; i++) {
+    const a = ps[i],
+      b = ps[(i + 1) % ps.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(s) / 2;
+}
+// Centroid gần đúng (lat,lng) từ trung bình Mercator
+function centroid(points: LatLng[]): LatLng {
+  const ps = points.map(toMerc);
+  const cx = ps.reduce((a, p) => a + p.x, 0) / ps.length;
+  const cy = ps.reduce((a, p) => a + p.y, 0) / ps.length;
+  const lng = (cx / R) * (180 / Math.PI);
+  const lat = (2 * Math.atan(Math.exp(cy / R)) - Math.PI / 2) * (180 / Math.PI);
+  return { latitude: lat, longitude: lng };
+}
 
 export default function DatePalmParcelPicker() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
 
-  const [mapSizePt, setMapSizePt] = useState({ w: 0, h: 0 });
   const [points, setPoints] = useState<LatLng[]>([]);
+  const [mapSizeDp, setMapSizeDp] = useState({ w: 0, h: 0 });
 
-  // Processor ẩn
-  const wrapperRef = useRef<View>(null);
+  const [showPins, setShowPins] = useState(true);
+
+  // processor ẩn
+  const [snapshotUri, setSnapshotUri] = useState<string | null>(null);
+  const [polyPx, setPolyPx] = useState<{ x: number; y: number }[]>([]);
   const viewShotRef = useRef<ViewShot>(null);
-  const [proc, setProc] = useState<null | {
-    imgDataUrl: string;
-    poly: { x: number; y: number }[];
-    bbox: { x: number; y: number; w: number; h: number };
-    snapW: number;
-    snapH: number;
-  }>(null);
-  const [imgReady, setImgReady] = useState(false);
-  const polyAttr = useMemo(
-    () => (proc ? proc.poly.map((p) => `${p.x},${p.y}`).join(" ") : ""),
-    [proc]
-  );
-
-  // chụp 224x224 sau khi SVGImage onLoad
-  useEffect(() => {
-    if (!proc || !imgReady || !viewShotRef.current) return;
-    let alive = true;
-    (async () => {
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      await new Promise((r) => setTimeout(r, 30));
-      if (!alive) return;
-      const out = await captureRef(viewShotRef, {
-        format: "png",
-        result: "tmpfile",
-        width: EXPORT.w,
-        height: EXPORT.h,
-        quality: 1,
-      });
-      if (!alive || !out) return;
-      router.push({
-        pathname: "/(tabs)/result",
-        params: { uri: out, polygon: JSON.stringify(points) },
-      });
-      setProc(null);
-      setImgReady(false);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [proc, imgReady]);
 
   const onPressMap = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -83,57 +83,68 @@ export default function DatePalmParcelPicker() {
   const resetAll = () => setPoints([]);
 
   const captureParcel = async () => {
-    if (!mapRef.current || points.length < 3 || !mapSizePt.w || !mapSizePt.h)
+    if (!mapRef.current || points.length < 3 || !mapSizeDp.w || !mapSizeDp.h)
       return;
 
-    // fit camera
-    mapRef.current.fitToCoordinates(points, {
-      edgePadding: { top: 40, left: 40, right: 40, bottom: 40 },
-      animated: false,
+    // tính region, centroid, diện tích
+    const region = toSquareRegion(points);
+    const center = centroid(points);
+    const area_m2 = areaSqm(points);
+    const area_ha = area_m2 / 10000;
+
+    // ẩn pin để không dính vào ảnh
+    setShowPins(false);
+
+    // ép camera và đợi khung hình
+    mapRef.current.animateToRegion(region, 0);
+    await new Promise((r) => setTimeout(r, 400));
+
+    // chụp snapshot vuông
+    const path = await mapRef.current.takeSnapshot({
+      width: TARGET,
+      height: TARGET,
+      format: "png",
+      quality: 1,
+      result: "file",
+      region,
     });
-    await new Promise((r) => setTimeout(r, 350));
-
-    // kích thước pixel thực của MapView
-    const scale = PixelRatio.get();
-    const snapW = Math.round(mapSizePt.w * scale);
-    const snapH = Math.round(mapSizePt.h * scale);
-
-    // toạ độ đỉnh theo "point" -> đổi sang pixel thực
-    const ptsPixel: { x: number; y: number }[] = [];
-    for (const p of points) {
-      // @ts-ignore
-      const pt = await mapRef.current.pointForCoordinate(p); // point đơn vị dp
-      ptsPixel.push({ x: pt.x * scale, y: pt.y * scale }); // pixel thực
+    const snapUri = path?.startsWith("file://") ? path : `file://${path}`;
+    if (!snapUri) {
+      setShowPins(true);
+      return;
     }
 
-    // không cần scale nữa vì snapshot = kích thước pixel thật
-    const polyScreen = ptsPixel;
+    // polygon -> pixel bằng pointForCoordinate rồi scale sang TARGET
+    const pts: { x: number; y: number }[] = [];
+    for (const p of points) {
+      // @ts-ignore
+      const pt = await mapRef.current.pointForCoordinate(p); // dp
+      const x = (pt.x / mapSizeDp.w) * TARGET;
+      const y = (pt.y / mapSizeDp.h) * TARGET;
+      pts.push({ x, y });
+    }
 
-    // bbox trong snapshot
-    const xs = polyScreen.map((p) => p.x),
-      ys = polyScreen.map((p) => p.y);
-    const minX = Math.max(0, Math.floor(Math.min(...xs)));
-    const minY = Math.max(0, Math.floor(Math.min(...ys)));
-    const maxX = Math.min(snapW, Math.ceil(Math.max(...xs)));
-    const maxY = Math.min(snapH, Math.ceil(Math.max(...ys)));
-    const bbox = {
-      x: minX,
-      y: minY,
-      w: Math.max(1, maxX - minX),
-      h: Math.max(1, maxY - minY),
-    };
+    // lưu và điều hướng
+    setSnapshotUri(snapUri);
+    setPolyPx(pts);
 
-    // snapshot đúng kích thước pixel thật
-    const base64 = await mapRef.current.takeSnapshot({
-      width: snapW,
-      height: snapH,
-      format: "png",
-      result: "base64",
+    // gửi kèm meta qua params
+    router.push({
+      pathname: "/(tabs)/result",
+      params: {
+        uri: snapUri,
+        polygon: JSON.stringify(points),
+        center: JSON.stringify(center),
+        area_m2: String(Math.round(area_m2)),
+        area_ha: String(area_ha),
+      },
     });
-    const imgDataUrl = `data:image/png;base64,${base64}`;
 
-    setProc({ imgDataUrl, poly: polyScreen, bbox, snapW, snapH });
+    // khôi phục pin sau khi điều hướng
+    setTimeout(() => setShowPins(true), 500);
   };
+
+  const polyAttr = polyPx.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
@@ -142,20 +153,26 @@ export default function DatePalmParcelPicker() {
         style={{ flex: 1 }}
         provider={PROVIDER_GOOGLE}
         mapType="satellite"
-        initialRegion={ARABIA_DEFAULT}
+        initialRegion={{
+          latitude: 25.383,
+          longitude: 49.588,
+          latitudeDelta: 0.25,
+          longitudeDelta: 0.25,
+        }}
         onPress={onPressMap}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
-          setMapSizePt({ w: width, h: height });
+          setMapSizeDp({ w: width, h: height });
         }}
         pitchEnabled={false}
         rotateEnabled={false}
         showsCompass={false}
         toolbarEnabled={false}
       >
-        {points.map((p, i) => (
-          <Marker key={`${p.latitude}-${p.longitude}-${i}`} coordinate={p} />
-        ))}
+        {showPins &&
+          points.map((p, i) => (
+            <Marker key={`${p.latitude}-${p.longitude}-${i}`} coordinate={p} />
+          ))}
         {points.length >= 3 && (
           <Polygon
             coordinates={points}
@@ -212,60 +229,23 @@ export default function DatePalmParcelPicker() {
           }}
         >
           <Text style={{ color: "#fff", fontWeight: "600" }}>
-            Chụp & cắt 224×224
+            Chụp & che viền ngoài {TARGET}×{TARGET}
           </Text>
         </Pressable>
       </View>
 
-      {/* Processor ẩn */}
-      {proc ? (
-        <View
-          ref={wrapperRef}
-          collapsable={false}
-          style={{
-            position: "absolute",
-            opacity: 0.01,
-            left: -10000,
-            top: -10000,
-            width: EXPORT.w,
-            height: EXPORT.h,
-          }}
-        >
-          <ViewShot
-            ref={viewShotRef}
-            style={{ width: EXPORT.w, height: EXPORT.h }}
-          >
-            <Svg
-              width={EXPORT.w}
-              height={EXPORT.h}
-              viewBox={`${proc.bbox.x} ${proc.bbox.y} ${proc.bbox.w} ${proc.bbox.h}`}
-            >
-              <Defs>
-                <ClipPath id="clip">
-                  <SvgPolygon points={polyAttr} />
-                </ClipPath>
-              </Defs>
-              {/* nền đen */}
-              <Rect
-                x={proc.bbox.x}
-                y={proc.bbox.y}
-                width={proc.bbox.w}
-                height={proc.bbox.h}
-                fill="black"
-              />
-              {/* ảnh clip theo đa giác */}
-              <SvgImage
-                href={{ uri: proc.imgDataUrl }}
-                width={proc.snapW}
-                height={proc.snapH}
-                preserveAspectRatio="xMidYMid meet"
-                clipPath="url(#clip)"
-                onLoad={() => setImgReady(true)}
-              />
+      {/* Nếu muốn debug mask trước khi gửi có thể bật khối dưới.
+      {snapshotUri && (
+        <View style={{ position: "absolute", left: -10000, top: -10000, width: TARGET, height: TARGET, opacity: 0.01 }}>
+          <ViewShot ref={viewShotRef} style={{ width: TARGET, height: TARGET }}>
+            <Svg width={TARGET} height={TARGET} viewBox={`0 0 ${TARGET} ${TARGET}`}>
+              <Defs><ClipPath id="clip"><SvgPolygon points={polyAttr} /></ClipPath></Defs>
+              <Rect x={0} y={0} width={TARGET} height={TARGET} fill="black" />
+              <SvgImage href={{ uri: snapshotUri }} width={TARGET} height={TARGET} clipPath="url(#clip)" preserveAspectRatio="xMidYMid slice" />
             </Svg>
           </ViewShot>
         </View>
-      ) : null}
+      )} */}
     </View>
   );
 }

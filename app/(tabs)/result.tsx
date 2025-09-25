@@ -1,4 +1,3 @@
-// app/(analysis)/result.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -16,11 +15,23 @@ const API_URL = "https://mako-fast-bobcat.ngrok-free.app/predict";
 
 export default function ResultPage() {
   const router = useRouter();
-  const { uri } = useLocalSearchParams<{ uri?: string }>();
+  const { uri, area_m2, area_ha, center } = useLocalSearchParams<{
+    uri?: string;
+    area_m2?: string;
+    area_ha?: string;
+    center?: string;
+  }>();
+
+  const areaSqm = area_m2 ? Number(area_m2) : undefined;
+  const areaHa = area_ha ? Number(area_ha) : undefined;
+  const centerLL = center
+    ? (JSON.parse(center) as { latitude: number; longitude: number })
+    : undefined;
 
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState<number | null>(null);
-  const [overlay, setOverlay] = useState<string | null>(null);
+  const [density, setDensity] = useState<number | null>(null);
+  const [overlayJpeg, setOverlayJpeg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const sendToAI = async () => {
@@ -28,7 +39,7 @@ export default function ResultPage() {
     setLoading(true);
     setErr(null);
     setCount(null);
-    setOverlay(null);
+    setOverlayJpeg(null);
     try {
       const form = new FormData();
       if (Platform.OS === "web") {
@@ -47,14 +58,13 @@ export default function ResultPage() {
       const res = await fetch(API_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      setCount(
-        typeof json?.predicted_count === "number" ? json.predicted_count : null
+      const c =
+        typeof json?.predicted_count === "number" ? json.predicted_count : null;
+      setCount(c);
+      setOverlayJpeg(
+        typeof json?.image_base64 === "string" ? json.image_base64 : null
       );
-      setOverlay(
-        typeof json?.overlay_image_base64 === "string"
-          ? json.overlay_image_base64
-          : null
-      );
+      if (c != null && areaHa && areaHa > 0) setDensity(c / areaHa); // cây/ha
     } catch (e: any) {
       setErr(e?.message || "Request failed");
     } finally {
@@ -69,12 +79,10 @@ export default function ResultPage() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0b0b0b" }}>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        {/* Tiêu đề */}
         <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>
           Your land parcel
         </Text>
 
-        {/* Ảnh gốc */}
         <View
           style={{
             backgroundColor: "#1f2937",
@@ -86,18 +94,36 @@ export default function ResultPage() {
           {uri ? (
             <Image
               source={{ uri }}
-              style={{
-                width: 224,
-                height: 224,
-                borderRadius: 12,
-              }}
+              style={{ width: "100%", aspectRatio: 1, borderRadius: 12 }}
+              resizeMode="cover"
             />
           ) : (
             <Text style={{ color: "#bbb" }}>No image available</Text>
           )}
         </View>
 
-        {/* Nút điều hướng */}
+        {(centerLL || areaSqm) && (
+          <View
+            style={{
+              backgroundColor: "#0f172a",
+              borderRadius: 12,
+              padding: 12,
+            }}
+          >
+            {centerLL && (
+              <Text style={{ color: "#cbd5e1" }}>
+                Center: {centerLL.latitude.toFixed(6)},{" "}
+                {centerLL.longitude.toFixed(6)}
+              </Text>
+            )}
+            {areaSqm != null && (
+              <Text style={{ color: "#cbd5e1", marginTop: 4 }}>
+                Area: {areaSqm.toLocaleString()} m² ({areaHa?.toFixed(2)} ha)
+              </Text>
+            )}
+          </View>
+        )}
+
         <View style={{ flexDirection: "row", gap: 12 }}>
           <Pressable
             onPress={() => router.push("/(tabs)/maps")}
@@ -113,7 +139,6 @@ export default function ResultPage() {
               Back to map
             </Text>
           </Pressable>
-
           <Pressable
             disabled={loading || !uri}
             onPress={sendToAI}
@@ -135,7 +160,6 @@ export default function ResultPage() {
           </Pressable>
         </View>
 
-        {/* Lỗi */}
         {err && (
           <View
             style={{
@@ -150,8 +174,7 @@ export default function ResultPage() {
           </View>
         )}
 
-        {/* Kết quả AI */}
-        {count !== null && (
+        {count != null && (
           <View
             style={{
               backgroundColor: "#112615",
@@ -164,13 +187,17 @@ export default function ResultPage() {
           >
             <Text style={{ color: "#6ee7b7", fontSize: 14 }}>AI result</Text>
             <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>
-              {count.toFixed(2)} Estimated tree count
+              {count.toFixed(0)} trees
             </Text>
+            {density != null && (
+              <Text style={{ color: "#d1fae5" }}>
+                Density: {density.toFixed(1)} trees/ha
+              </Text>
+            )}
           </View>
         )}
 
-        {/* Overlay */}
-        {overlay && (
+        {overlayJpeg && (
           <View
             style={{
               backgroundColor: "#1f2937",
@@ -179,14 +206,10 @@ export default function ResultPage() {
               gap: 8,
             }}
           >
-            <Text style={{ color: "#9ca3af" }}>Server overlay</Text>
+            <Text style={{ color: "#9ca3af" }}>Compressed overlay (JPEG)</Text>
             <Image
-              source={{ uri: `data:image/jpeg;base64,${overlay}` }}
-              style={{
-                width: "100%",
-                height: 300,
-                borderRadius: 12,
-              }}
+              source={{ uri: `data:image/jpeg;base64,${overlayJpeg}` }}
+              style={{ width: "100%", aspectRatio: 1, borderRadius: 12 }}
               resizeMode="contain"
             />
           </View>
