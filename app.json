@@ -9,12 +9,18 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "plugins": ["expo-camera"],
+      "plugins": [
+        "expo-camera",
+        "expo-camera"
+      ],
       "supportsTablet": true,
       "infoPlist": {
-      "NSCameraUsageDescription": "We use the camera to capture your face for analysis.",
-      "NSPhotoLibraryUsageDescription": "Allow picking photos for analysis."
-    }
+        "NSCameraUsageDescription": "We use the camera to capture your face for analysis.",
+        "NSPhotoLibraryUsageDescription": "Allow picking photos for analysis."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -42,6 +48,15 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "97fbb181-b5d0-4c67-84cf-13ade1fdcdf9"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/97fbb181-b5d0-4c67-84cf-13ade1fdcdf9"
     }
   }
 }
