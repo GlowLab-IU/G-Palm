@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -356,7 +356,7 @@ export default function ResultPage() {
         {/* Nút */}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <Pressable
-            onPress={() => router.push("/(tabs)/maps")}
+            onPress={() => router.push("/(tabs)/maps" as Href)}
             style={{
               flex: 1,
               backgroundColor: "#374151",
