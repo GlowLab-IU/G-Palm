@@ -38,46 +38,48 @@ export default function Welcome() {
         {/* Hero */}
         <View className="rounded-2xl bg-white/5 border border-white/15 p-6">
           <Text className="text-white text-3xl font-extrabold leading-tight">
-            Đếm cây chà là bằng AI
+            Count palm trees with AI
           </Text>
           <Text className="text-white/70 mt-3">
-            Chọn thửa đất trên ảnh vệ tinh, cắt đúng ranh, gửi lên AI để ước
-            tính số cây và nhận bản đồ mật độ.
+            Select a parcel on the satellite map, crop the exact boundary, send
+            it to AI to estimate tree count and receive a density map.
           </Text>
 
           {/* Steps */}
           <View className="mt-4 flex-row gap-8">
             <View className="items-center">
-              <Text className="text-white/60 text-xs">B1</Text>
+              <Text className="text-white/60 text-xs">Step 1</Text>
               <Ionicons name="map-outline" size={26} color="#86efac" />
-              <Text className="text-white/80 text-xs mt-1">Chọn ranh</Text>
+              <Text className="text-white/80 text-xs mt-1">
+                Select boundary
+              </Text>
             </View>
             <View className="items-center">
-              <Text className="text-white/60 text-xs">B2</Text>
+              <Text className="text-white/60 text-xs">Step 2</Text>
               <Ionicons name="crop-outline" size={26} color="#86efac" />
-              <Text className="text-white/80 text-xs mt-1">Cắt 224×224</Text>
+              <Text className="text-white/80 text-xs mt-1">Crop 224×224</Text>
             </View>
             <View className="items-center">
-              <Text className="text-white/60 text-xs">B3</Text>
+              <Text className="text-white/60 text-xs">Step 3</Text>
               <Ionicons name="sparkles-outline" size={26} color="#86efac" />
-              <Text className="text-white/80 text-xs mt-1">Gửi AI</Text>
+              <Text className="text-white/80 text-xs mt-1">Send to AI</Text>
             </View>
           </View>
         </View>
 
-        {/* Features (không dùng grid) */}
+        {/* Features */}
         <View className="gap-3">
-          {/* Hàng 1 */}
+          {/* Row 1 */}
           <View className="flex-row gap-3">
             <View className="flex-1 rounded-2xl bg-white/5 border border-white/10 p-4">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="earth-outline" size={20} color="#93c5fd" />
                 <Text className="text-white font-semibold">
-                  Ảnh vệ tinh Google
+                  Google Satellite Image
                 </Text>
               </View>
               <Text className="text-white/70 mt-1 text-sm">
-                Map vệ tinh, auto-zoom, đánh dấu đa giác.
+                Satellite map, auto-zoom, polygon marking.
               </Text>
             </View>
 
@@ -85,16 +87,16 @@ export default function Welcome() {
               <View className="flex-row items-center gap-2">
                 <Ionicons name="resize-outline" size={20} color="#fda4af" />
                 <Text className="text-white font-semibold">
-                  Cắt theo ranh • 224×224
+                  Crop by boundary • 224×224
                 </Text>
               </View>
               <Text className="text-white/70 mt-1 text-sm">
-                Tô đen ngoài ranh. Chuẩn bị cho inference.
+                Mask outside the boundary. Prepare for inference.
               </Text>
             </View>
           </View>
 
-          {/* Hàng 2 */}
+          {/* Row 2 */}
           <View className="flex-row gap-3">
             <View className="flex-1 rounded-2xl bg-white/5 border border-white/10 p-4">
               <View className="flex-row items-center gap-2">
@@ -104,27 +106,29 @@ export default function Welcome() {
                   color="#86efac"
                 />
                 <Text className="text-white font-semibold">
-                  AI Server Predict
+                  AI Server Prediction
                 </Text>
               </View>
               <Text className="text-white/70 mt-1 text-sm">
-                Gửi ảnh, nhận số cây và overlay mật độ.
+                Send the image, receive tree count and density overlay.
               </Text>
             </View>
 
             <View className="flex-1 rounded-2xl bg-white/5 border border-white/10 p-4">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="grid-outline" size={20} color="#fde68a" />
-                <Text className="text-white font-semibold">Tính diện tích</Text>
+                <Text className="text-white font-semibold">
+                  Area calculation
+                </Text>
               </View>
               <Text className="text-white/70 mt-1 text-sm">
-                Ước tính m²/ha bằng Web Mercator cho thửa nhỏ.
+                Estimate m²/ha using Web Mercator for small parcels.
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Preview minh hoạ */}
+        {/* Preview */}
         <View className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
           <Image
             source={Images.hero}
@@ -142,7 +146,7 @@ export default function Welcome() {
             <Text className="text-white font-semibold">G</Text>
           </View>
           <Text className="text-black text-base font-semibold">
-            Tiếp tục với Google
+            Continue with Google
           </Text>
         </Pressable>
 
@@ -154,13 +158,13 @@ export default function Welcome() {
             <Ionicons name="logo-apple" size={18} color="#fff" />
           </View>
           <Text className="text-white text-base font-semibold">
-            Tiếp tục với Apple
+            Continue with Apple
           </Text>
         </Pressable>
 
         {/* Divider */}
         <View className="items-center">
-          <Text className="text-white/50 text-sm">hoặc</Text>
+          <Text className="text-white/50 text-sm">or</Text>
         </View>
 
         {/* CTAs */}
@@ -169,7 +173,7 @@ export default function Welcome() {
           className="h-14 rounded-full bg-green-600 items-center justify-center"
         >
           <Text className="text-white text-base font-semibold">
-            Bắt đầu tạo thửa và đếm cây
+            Start creating parcels & counting trees
           </Text>
         </Pressable>
 
@@ -177,7 +181,9 @@ export default function Welcome() {
           onPress={() => router.push("/signin")}
           className="h-14 rounded-full border border-white/20 items-center justify-center"
         >
-          <Text className="text-white/80 text-base">Đăng nhập tài khoản</Text>
+          <Text className="text-white/80 text-base">
+            Sign in to your account
+          </Text>
         </Pressable>
 
         {/* Footer */}

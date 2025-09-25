@@ -60,12 +60,12 @@ export default function HomePage() {
             </Text>
           </View>
           <TWButton
-            title="Đăng nhập"
+            title="Sign In"
             variant="ghost"
             onPress={() => router.push("/(auth)/signin" as Href)}
           />
           <TWButton
-            title="Đăng ký"
+            title="Sign Up"
             variant="ghost"
             onPress={() => router.push("/(auth)/signup" as Href)}
           />

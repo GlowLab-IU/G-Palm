@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { PixelRatio, Pressable, Text, View } from "react-native";
 import MapView, {
   LatLng,
   Marker,
@@ -8,11 +8,18 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
-import ViewShot from "react-native-view-shot";
+import Svg, {
+  ClipPath,
+  Defs,
+  Image as SvgImage,
+  Polygon as SvgPolygon,
+} from "react-native-svg";
+import ViewShot, { captureRef } from "react-native-view-shot";
 
-const TARGET = 1024; // >= 640
-const PAD = 1.15; // nới vùng chụp
-const R = 6378137; // bán kính WGS84 (m)
+const MIN_TARGET = 640; // cạnh dài tối thiểu ảnh xuất
+const PAD_REGION = 1.03; // nới region khi chụp snapshot
+const OUT_PAD_PX = 8; // chừa viền nhỏ khi crop
+const R = 6378137;
 
 // region vuông bao đa giác
 function toSquareRegion(points: LatLng[]): Region {
@@ -24,7 +31,7 @@ function toSquareRegion(points: LatLng[]): Region {
     maxLng = Math.max(...lngs);
   const centerLat = (minLat + maxLat) / 2;
   const centerLng = (minLng + maxLng) / 2;
-  const side = Math.max(maxLat - minLat, maxLng - minLng) * PAD || 0.001;
+  const side = Math.max(maxLat - minLat, maxLng - minLng) * PAD_REGION || 0.001;
   return {
     latitude: centerLat,
     longitude: centerLng,
@@ -33,14 +40,13 @@ function toSquareRegion(points: LatLng[]): Region {
   };
 }
 
-// Web Mercator (m)
+// Mercator để tính diện tích và centroid
 const toMerc = (p: LatLng) => {
   const x = (p.longitude * Math.PI) / 180;
   const yRad = (p.latitude * Math.PI) / 180;
   const y = Math.log(Math.tan(Math.PI / 4 + yRad / 2));
   return { x: R * x, y: R * y };
 };
-// Diện tích đa giác (m²) theo shoelace trên mặt phẳng Mercator
 function areaSqm(points: LatLng[]): number {
   const ps = points.map(toMerc);
   let s = 0;
@@ -51,7 +57,6 @@ function areaSqm(points: LatLng[]): number {
   }
   return Math.abs(s) / 2;
 }
-// Centroid gần đúng (lat,lng) từ trung bình Mercator
 function centroid(points: LatLng[]): LatLng {
   const ps = points.map(toMerc);
   const cx = ps.reduce((a, p) => a + p.x, 0) / ps.length;
@@ -67,12 +72,25 @@ export default function DatePalmParcelPicker() {
 
   const [points, setPoints] = useState<LatLng[]>([]);
   const [mapSizeDp, setMapSizeDp] = useState({ w: 0, h: 0 });
-
   const [showPins, setShowPins] = useState(true);
 
-  // processor ẩn
+  // snapshot/meta
   const [snapshotUri, setSnapshotUri] = useState<string | null>(null);
+  const [snapW, setSnapW] = useState(0);
+  const [snapH, setSnapH] = useState(0);
   const [polyPx, setPolyPx] = useState<{ x: number; y: number }[]>([]);
+  const [bbox, setBbox] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const [meta, setMeta] = useState<{
+    center: LatLng;
+    area_m2: number;
+    area_ha: number;
+  } | null>(null);
+
   const viewShotRef = useRef<ViewShot>(null);
 
   const onPressMap = (e: any) => {
@@ -86,23 +104,23 @@ export default function DatePalmParcelPicker() {
     if (!mapRef.current || points.length < 3 || !mapSizeDp.w || !mapSizeDp.h)
       return;
 
-    // tính region, centroid, diện tích
     const region = toSquareRegion(points);
     const center = centroid(points);
     const area_m2 = areaSqm(points);
     const area_ha = area_m2 / 10000;
 
-    // ẩn pin để không dính vào ảnh
     setShowPins(false);
-
-    // ép camera và đợi khung hình
     mapRef.current.animateToRegion(region, 0);
     await new Promise((r) => setTimeout(r, 400));
 
-    // chụp snapshot vuông
+    // chụp snapshot đúng pixel thật của MapView
+    const scale = PixelRatio.get();
+    const viewPxW = Math.round(mapSizeDp.w * scale);
+    const viewPxH = Math.round(mapSizeDp.h * scale);
+
     const path = await mapRef.current.takeSnapshot({
-      width: TARGET,
-      height: TARGET,
+      width: viewPxW,
+      height: viewPxH,
       format: "png",
       quality: 1,
       result: "file",
@@ -114,35 +132,88 @@ export default function DatePalmParcelPicker() {
       return;
     }
 
-    // polygon -> pixel bằng pointForCoordinate rồi scale sang TARGET
+    // polygon → pixel thật
     const pts: { x: number; y: number }[] = [];
     for (const p of points) {
       // @ts-ignore
       const pt = await mapRef.current.pointForCoordinate(p); // dp
-      const x = (pt.x / mapSizeDp.w) * TARGET;
-      const y = (pt.y / mapSizeDp.h) * TARGET;
-      pts.push({ x, y });
+      pts.push({ x: Math.round(pt.x * scale), y: Math.round(pt.y * scale) });
     }
 
-    // lưu và điều hướng
+    // bbox sát đa giác
+    const xs = pts.map((p) => p.x),
+      ys = pts.map((p) => p.y);
+    let minX = Math.max(0, Math.min(...xs) - OUT_PAD_PX);
+    let minY = Math.max(0, Math.min(...ys) - OUT_PAD_PX);
+    let maxX = Math.min(viewPxW, Math.max(...xs) + OUT_PAD_PX);
+    let maxY = Math.min(viewPxH, Math.max(...ys) + OUT_PAD_PX);
+    const box = {
+      x: Math.floor(minX),
+      y: Math.floor(minY),
+      w: Math.max(1, Math.ceil(maxX - minX)),
+      h: Math.max(1, Math.ceil(maxY - minY)),
+    };
+
     setSnapshotUri(snapUri);
+    setSnapW(viewPxW);
+    setSnapH(viewPxH);
     setPolyPx(pts);
-
-    // gửi kèm meta qua params
-    router.push({
-      pathname: "/(tabs)/result",
-      params: {
-        uri: snapUri,
-        polygon: JSON.stringify(points),
-        center: JSON.stringify(center),
-        area_m2: String(Math.round(area_m2)),
-        area_ha: String(area_ha),
-      },
-    });
-
-    // khôi phục pin sau khi điều hướng
-    setTimeout(() => setShowPins(true), 500);
+    setBbox(box);
+    setMeta({ center, area_m2, area_ha });
   };
+
+  // render SVG cắt theo bbox và xuất PNG alpha, phóng to ≥640
+  useEffect(() => {
+    if (
+      !snapshotUri ||
+      !bbox ||
+      polyPx.length < 3 ||
+      !viewShotRef.current ||
+      !meta
+    )
+      return;
+    let alive = true;
+    (async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await new Promise((r) => setTimeout(r, 16));
+      if (!alive) return;
+
+      const scale = Math.max(MIN_TARGET / Math.max(bbox.w, bbox.h), 1);
+      const outW = Math.round(bbox.w * scale);
+      const outH = Math.round(bbox.h * scale);
+
+      const maskedPng = await captureRef(viewShotRef, {
+        format: "png",
+        result: "tmpfile",
+        quality: 1,
+        width: outW,
+        height: outH,
+      });
+      if (!alive || !maskedPng) return;
+
+      router.push({
+        pathname: "/(tabs)/result",
+        params: {
+          uri: maskedPng,
+          polygon: JSON.stringify(points),
+          center: JSON.stringify(meta.center),
+          area_m2: String(Math.round(meta.area_m2)),
+          area_ha: String(meta.area_ha),
+        },
+      });
+
+      setSnapshotUri(null);
+      setPolyPx([]);
+      setBbox(null);
+      setMeta(null);
+      setSnapW(0);
+      setSnapH(0);
+      setTimeout(() => setShowPins(true), 300);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [snapshotUri, bbox, polyPx, meta]);
 
   const polyAttr = polyPx.map((p) => `${p.x},${p.y}`).join(" ");
 
@@ -203,7 +274,7 @@ export default function DatePalmParcelPicker() {
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "#fff" }}>Undo điểm</Text>
+            <Text style={{ color: "#fff" }}>Undo </Text>
           </Pressable>
           <Pressable
             onPress={resetAll}
@@ -229,23 +300,47 @@ export default function DatePalmParcelPicker() {
           }}
         >
           <Text style={{ color: "#fff", fontWeight: "600" }}>
-            Chụp & che viền ngoài {TARGET}×{TARGET}
+            Crop tightly to boundary ≥{MIN_TARGET}px
           </Text>
         </Pressable>
       </View>
 
-      {/* Nếu muốn debug mask trước khi gửi có thể bật khối dưới.
-      {snapshotUri && (
-        <View style={{ position: "absolute", left: -10000, top: -10000, width: TARGET, height: TARGET, opacity: 0.01 }}>
-          <ViewShot ref={viewShotRef} style={{ width: TARGET, height: TARGET }}>
-            <Svg width={TARGET} height={TARGET} viewBox={`0 0 ${TARGET} ${TARGET}`}>
-              <Defs><ClipPath id="clip"><SvgPolygon points={polyAttr} /></ClipPath></Defs>
-              <Rect x={0} y={0} width={TARGET} height={TARGET} fill="black" />
-              <SvgImage href={{ uri: snapshotUri }} width={TARGET} height={TARGET} clipPath="url(#clip)" preserveAspectRatio="xMidYMid slice" />
+      {/* Processor ẩn: crop theo bbox, ngoài ranh = trong suốt */}
+      {snapshotUri && bbox && (
+        <View
+          style={{
+            position: "absolute",
+            left: -10000,
+            top: -10000,
+            backgroundColor: "transparent",
+          }}
+          collapsable={false}
+        >
+          <ViewShot
+            ref={viewShotRef}
+            style={{ backgroundColor: "transparent" }}
+          >
+            <Svg
+              width={bbox.w}
+              height={bbox.h}
+              viewBox={`${bbox.x} ${bbox.y} ${bbox.w} ${bbox.h}`} // crop đúng bbox
+            >
+              <Defs>
+                <ClipPath id="clip">
+                  <SvgPolygon points={polyAttr} />
+                </ClipPath>
+              </Defs>
+              <SvgImage
+                href={{ uri: snapshotUri }}
+                width={snapW}
+                height={snapH}
+                clipPath="url(#clip)"
+                preserveAspectRatio="none"
+              />
             </Svg>
           </ViewShot>
         </View>
-      )} */}
+      )}
     </View>
   );
 }
