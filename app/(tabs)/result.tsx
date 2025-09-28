@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -14,9 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = "https://mako-fast-bobcat.ngrok-free.app/predict";
 
-// map weathercode -> icon + text
+// weather icon map
 const wxIcon = (code: number) => {
-  // nhóm theo https://open-meteo.com/ docs
   if ([0].includes(code)) return { name: "weather-sunny", label: "Clear" };
   if ([1, 2].includes(code))
     return { name: "weather-partly-cloudy", label: "Partly cloudy" };
@@ -34,30 +33,83 @@ const wxIcon = (code: number) => {
 };
 
 type Weather = {
-  temperature?: number; // °C
-  humidity?: number; // %
-  apparent?: number; // °C
-  precipitation?: number; // mm
-  windspeed?: number; // km/h
-  winddirection?: number; // °
-  cloudcover?: number; // %
+  temperature?: number;
+  humidity?: number;
+  apparent?: number;
+  precipitation?: number;
+  windspeed?: number;
+  winddirection?: number;
+  cloudcover?: number;
   code?: number;
 };
 
+type Tile = { z: number; x: number; y: number };
+type Bounds = { north: number; south: number; west: number; east: number };
+function decodeOctant(qk: string): Tile | null {
+  if (!qk) return null;
+  let x = 0,
+    y = 0;
+  const z = qk.length;
+  for (let i = 0; i < z; i++) {
+    const bit = z - i - 1,
+      c = qk[i],
+      mask = 1 << bit;
+    if (c === "1" || c === "3") x |= mask;
+    if (c === "2" || c === "3") y |= mask;
+    if (c !== "0" && c !== "1" && c !== "2" && c !== "3") return null;
+  }
+  return { z, x, y };
+}
+function tileBounds(t: Tile): Bounds {
+  const n = 1 << t.z;
+  const lon = (tx: number) => (tx / n) * 360 - 180;
+  const lat = (ty: number) => {
+    const n2 = Math.PI - (2 * Math.PI * ty) / n;
+    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n2) - Math.exp(-n2)));
+  };
+  return {
+    west: lon(t.x),
+    east: lon(t.x + 1),
+    north: lat(t.y),
+    south: lat(t.y + 1),
+  };
+}
+
 export default function ResultPage() {
   const router = useRouter();
-  const { uri, area_m2, area_ha, center } = useLocalSearchParams<{
+  const { uri, area_m2, area_ha, center, octant } = useLocalSearchParams<{
     uri?: string;
     area_m2?: string;
     area_ha?: string;
     center?: string;
+    octant?: string;
   }>();
+
+  const rawUri = typeof uri === "string" ? uri : undefined;
+  const decodedUri = useMemo(() => {
+    if (!rawUri) return undefined;
+    try {
+      if (rawUri.startsWith("file://") || rawUri.startsWith("data:"))
+        return rawUri;
+
+      const u = decodeURIComponent(rawUri);
+      return u.startsWith("file://") || u.startsWith("data:") ? u : rawUri;
+    } catch {
+      return rawUri;
+    }
+  }, [rawUri]);
 
   const areaSqm = area_m2 ? Number(area_m2) : undefined;
   const areaHa = area_ha ? Number(area_ha) : undefined;
   const centerLL = center
     ? (JSON.parse(center) as { latitude: number; longitude: number })
     : undefined;
+
+  const tile = useMemo(
+    () => (octant ? decodeOctant(String(octant)) : null),
+    [octant]
+  );
+  const bounds = useMemo(() => (tile ? tileBounds(tile) : null), [tile]);
 
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState<number | null>(null);
@@ -68,13 +120,12 @@ export default function ResultPage() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [wxErr, setWxErr] = useState<string | null>(null);
 
-  // fetch thời tiết tại tâm
+  // 2) Thời tiết tại tâm
   useEffect(() => {
     const run = async () => {
       if (!centerLL) return;
       try {
         setWxErr(null);
-        // Open-Meteo current fields
         const q =
           `https://api.open-meteo.com/v1/forecast?latitude=${centerLL.latitude}` +
           `&longitude=${centerLL.longitude}` +
@@ -101,27 +152,40 @@ export default function ResultPage() {
     run();
   }, [center]);
 
+  // 3) Gửi ảnh cho AI
   const sendToAI = async () => {
-    if (!uri) return;
+    if (!decodedUri) return;
     setLoading(true);
     setErr(null);
     setCount(null);
     setOverlayJpeg(null);
     try {
       const form = new FormData();
+
       if (Platform.OS === "web") {
-        const blob = await fetch(uri).then((r) => r.blob());
+        const blob = await fetch(decodedUri).then((r) => r.blob());
         form.append(
           "file",
           new File([blob], "parcel.png", { type: "image/png" })
         );
       } else {
         form.append("file", {
-          uri,
+          uri: decodedUri,
           name: "parcel.png",
           type: "image/png",
         } as any);
       }
+
+      // optional metadata
+      if (octant) form.append("octant", String(octant));
+      if (bounds) form.append("octant_bounds", JSON.stringify(bounds));
+      if (areaSqm != null) form.append("area_m2", String(areaSqm));
+      if (areaHa != null) form.append("area_ha", String(areaHa));
+      if (centerLL) {
+        form.append("center_lat", String(centerLL.latitude));
+        form.append("center_lng", String(centerLL.longitude));
+      }
+
       const res = await fetch(API_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -140,8 +204,9 @@ export default function ResultPage() {
   };
 
   useEffect(() => {
+    // gọi khi có uri mới
     sendToAI();
-  }, [uri]);
+  }, [decodedUri]);
 
   const centerIcon = (
     <Ionicons
@@ -173,7 +238,7 @@ export default function ResultPage() {
           Your land parcel
         </Text>
 
-        {/* Ảnh kết quả đã crop/mask */}
+        {/* Ảnh 1:1 */}
         <View
           style={{
             backgroundColor: "#111827",
@@ -182,19 +247,19 @@ export default function ResultPage() {
             alignItems: "center",
           }}
         >
-          {uri ? (
+          {decodedUri ? (
             <Image
-              source={{ uri }}
+              source={{ uri: decodedUri }}
               style={{ width: "100%", aspectRatio: 1, borderRadius: 12 }}
               resizeMode="contain"
+              onError={(e) => {}}
             />
           ) : (
             <Text style={{ color: "#bbb" }}>No image available</Text>
           )}
         </View>
 
-        {/* Meta: tâm + diện tích */}
-        {(centerLL || areaSqm) && (
+        {(centerLL || areaSqm != null) && (
           <View
             style={{
               backgroundColor: "#0b1220",
@@ -225,7 +290,34 @@ export default function ResultPage() {
           </View>
         )}
 
-        {/* Thời tiết hiện tại tại tâm */}
+        {(octant || bounds) && (
+          <View
+            style={{
+              backgroundColor: "#0c101a",
+              borderRadius: 12,
+              padding: 12,
+              borderWidth: 1,
+              borderColor: "#1a2a3f",
+              gap: 6,
+            }}
+          >
+            <Text style={{ color: "#93c5fd", fontWeight: "700" }}>
+              Tile metadata
+            </Text>
+            {octant && (
+              <Text style={{ color: "#cbd5e1" }}>octant: {String(octant)}</Text>
+            )}
+            {bounds && (
+              <Text style={{ color: "#cbd5e1" }}>
+                bounds: N {bounds.north.toFixed(6)} · S{" "}
+                {bounds.south.toFixed(6)} · W {bounds.west.toFixed(6)} · E{" "}
+                {bounds.east.toFixed(6)}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Weather */}
         <View
           style={{
             backgroundColor: "#09111c",
@@ -353,7 +445,7 @@ export default function ResultPage() {
           )}
         </View>
 
-        {/* Nút */}
+        {/* Actions */}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <Pressable
             onPress={() => router.push("/(tabs)/maps" as Href)}
@@ -371,11 +463,11 @@ export default function ResultPage() {
           </Pressable>
 
           <Pressable
-            disabled={loading || !uri}
+            disabled={loading || !decodedUri}
             onPress={sendToAI}
             style={{
               flex: 1,
-              backgroundColor: loading || !uri ? "#4b5563" : "#16a34a",
+              backgroundColor: loading || !decodedUri ? "#4b5563" : "#16a34a",
               paddingVertical: 14,
               borderRadius: 12,
               alignItems: "center",
@@ -391,7 +483,7 @@ export default function ResultPage() {
           </Pressable>
         </View>
 
-        {/* Kết quả AI */}
+        {/* AI result */}
         {err && (
           <View
             style={{
@@ -428,7 +520,7 @@ export default function ResultPage() {
           </View>
         )}
 
-        {/* Overlay từ server */}
+        {/* Overlay */}
         {overlayJpeg && (
           <View
             style={{
