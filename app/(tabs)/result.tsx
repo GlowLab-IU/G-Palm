@@ -1,20 +1,19 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_URL = "https://mako-fast-bobcat.ngrok-free.app/predict";
+const API_URL = "https://91tnmr9n-8000.asse.devtunnels.ms/predict";
 
-// weather icon map
 const wxIcon = (code: number) => {
   if ([0].includes(code)) return { name: "weather-sunny", label: "Clear" };
   if ([1, 2].includes(code))
@@ -31,7 +30,6 @@ const wxIcon = (code: number) => {
     return { name: "weather-lightning", label: "Thunderstorm" };
   return { name: "weather-cloudy", label: "Weather" };
 };
-
 type Weather = {
   temperature?: number;
   humidity?: number;
@@ -43,95 +41,48 @@ type Weather = {
   code?: number;
 };
 
-type Tile = { z: number; x: number; y: number };
-type Bounds = { north: number; south: number; west: number; east: number };
-function decodeOctant(qk: string): Tile | null {
-  if (!qk) return null;
-  let x = 0,
-    y = 0;
-  const z = qk.length;
-  for (let i = 0; i < z; i++) {
-    const bit = z - i - 1,
-      c = qk[i],
-      mask = 1 << bit;
-    if (c === "1" || c === "3") x |= mask;
-    if (c === "2" || c === "3") y |= mask;
-    if (c !== "0" && c !== "1" && c !== "2" && c !== "3") return null;
-  }
-  return { z, x, y };
-}
-function tileBounds(t: Tile): Bounds {
-  const n = 1 << t.z;
-  const lon = (tx: number) => (tx / n) * 360 - 180;
-  const lat = (ty: number) => {
-    const n2 = Math.PI - (2 * Math.PI * ty) / n;
-    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n2) - Math.exp(-n2)));
-  };
-  return {
-    west: lon(t.x),
-    east: lon(t.x + 1),
-    north: lat(t.y),
-    south: lat(t.y + 1),
-  };
-}
-
 export default function ResultPage() {
   const router = useRouter();
-  const { uri, area_m2, area_ha, center, octant } = useLocalSearchParams<{
+  const { uri, area_m2, area_ha, center, polygon } = useLocalSearchParams<{
     uri?: string;
     area_m2?: string;
     area_ha?: string;
     center?: string;
-    octant?: string;
+    polygon?: string;
   }>();
-
-  const rawUri = typeof uri === "string" ? uri : undefined;
-  const decodedUri = useMemo(() => {
-    if (!rawUri) return undefined;
-    try {
-      if (rawUri.startsWith("file://") || rawUri.startsWith("data:"))
-        return rawUri;
-
-      const u = decodeURIComponent(rawUri);
-      return u.startsWith("file://") || u.startsWith("data:") ? u : rawUri;
-    } catch {
-      return rawUri;
-    }
-  }, [rawUri]);
 
   const areaSqm = area_m2 ? Number(area_m2) : undefined;
   const areaHa = area_ha ? Number(area_ha) : undefined;
   const centerLL = center
     ? (JSON.parse(center) as { latitude: number; longitude: number })
     : undefined;
-
-  const tile = useMemo(
-    () => (octant ? decodeOctant(String(octant)) : null),
-    [octant]
-  );
-  const bounds = useMemo(() => (tile ? tileBounds(tile) : null), [tile]);
+  const polygonPoints = polygon ? JSON.parse(polygon) : undefined;
+  const rawUri = typeof uri === "string" ? uri : undefined;
+  const decodedUri = useMemo(() => {
+    if (!rawUri || rawUri === "") return undefined;
+    if (rawUri.startsWith("file://")) return rawUri;
+    try {
+      const u = decodeURIComponent(rawUri);
+      return u.startsWith("file://") ? u : rawUri;
+    } catch {
+      return rawUri;
+    }
+  }, [rawUri]);
 
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [density, setDensity] = useState<number | null>(null);
   const [overlayJpeg, setOverlayJpeg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-
   const [weather, setWeather] = useState<Weather | null>(null);
   const [wxErr, setWxErr] = useState<string | null>(null);
 
-  // 2) Thời tiết tại tâm
   useEffect(() => {
     const run = async () => {
       if (!centerLL) return;
       try {
         setWxErr(null);
-        const q =
-          `https://api.open-meteo.com/v1/forecast?latitude=${centerLL.latitude}` +
-          `&longitude=${centerLL.longitude}` +
-          `&current=temperature_2m,relative_humidity_2m,apparent_temperature,` +
-          `precipitation,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code` +
-          `&timezone=auto`;
+        const q = `https://api.open-meteo.com/v1/forecast?latitude=${centerLL.latitude}&longitude=${centerLL.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&timezone=auto`;
         const r = await fetch(q);
         const j = await r.json();
         const c = j?.current || {};
@@ -149,51 +100,41 @@ export default function ResultPage() {
         setWxErr(e?.message || "Weather fetch failed");
       }
     };
-    run();
-  }, [center]);
+    if (centerLL) run();
+  }, [center, centerLL]);
 
-  // 3) Gửi ảnh cho AI
   const sendToAI = async () => {
-    if (!decodedUri) return;
+    if (!polygonPoints || !centerLL) {
+      setErr("Invalid polygon or center data.");
+      return;
+    }
     setLoading(true);
     setErr(null);
     setCount(null);
+    setDensity(null);
     setOverlayJpeg(null);
     try {
-      const form = new FormData();
+      const body = {
+        polygon: polygonPoints,
+        center: centerLL,
+        area_m2: areaSqm,
+        area_ha: areaHa,
+      };
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
 
-      if (Platform.OS === "web") {
-        const blob = await fetch(decodedUri).then((r) => r.blob());
-        form.append(
-          "file",
-          new File([blob], "parcel.png", { type: "image/png" })
-        );
-      } else {
-        form.append("file", {
-          uri: decodedUri,
-          name: "parcel.png",
-          type: "image/png",
-        } as any);
-      }
-
-      // optional metadata
-      if (octant) form.append("octant", String(octant));
-      if (bounds) form.append("octant_bounds", JSON.stringify(bounds));
-      if (areaSqm != null) form.append("area_m2", String(areaSqm));
-      if (areaHa != null) form.append("area_ha", String(areaHa));
-      if (centerLL) {
-        form.append("center_lat", String(centerLL.latitude));
-        form.append("center_lng", String(centerLL.longitude));
-      }
-
-      const res = await fetch(API_URL, { method: "POST", body: form });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const c =
         typeof json?.predicted_count === "number" ? json.predicted_count : null;
       setCount(c);
       setOverlayJpeg(
-        typeof json?.image_base64 === "string" ? json.image_base64 : null
+        typeof json?.overlay_image_base64 === "string"
+          ? json.overlay_image_base64
+          : null
       );
       if (c != null && areaHa && areaHa > 0) setDensity(c / areaHa);
     } catch (e: any) {
@@ -204,14 +145,15 @@ export default function ResultPage() {
   };
 
   useEffect(() => {
-    // gọi khi có uri mới
-    sendToAI();
-  }, [decodedUri]);
+    if (polygonPoints) {
+      sendToAI();
+    }
+  }, [polygon]);
 
   const centerIcon = (
     <Ionicons
       name="location"
-      size={16}
+      size={18}
       color="#60a5fa"
       style={{ marginRight: 6 }}
     />
@@ -219,12 +161,11 @@ export default function ResultPage() {
   const areaIcon = (
     <MaterialCommunityIcons
       name="map-legend"
-      size={16}
+      size={18}
       color="#34d399"
       style={{ marginRight: 6 }}
     />
   );
-
   const wx = weather;
   const wxPack =
     wx?.code != null
@@ -232,57 +173,53 @@ export default function ResultPage() {
       : { name: "weather-cloudy", label: "Weather" };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#0b0b0b" }}>
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>
-          Your land parcel
-        </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
+        <Text style={styles.title}>Analysis Result</Text>
 
-        {/* Ảnh 1:1 */}
-        <View
-          style={{
-            backgroundColor: "#111827",
-            borderRadius: 12,
-            padding: 12,
-            alignItems: "center",
-          }}
-        >
+        <Text style={styles.imageSectionTitle}>Selected Area Snapshot</Text>
+        <View style={styles.imageContainer}>
           {decodedUri ? (
             <Image
               source={{ uri: decodedUri }}
-              style={{ width: "100%", aspectRatio: 1, borderRadius: 12 }}
+              style={styles.image}
               resizeMode="contain"
-              onError={(e) => {}}
+              onError={(e) => {
+                console.warn(
+                  "Error loading snapshot image:",
+                  e.nativeEvent.error
+                );
+                setErr("Error loading preview image.");
+              }}
             />
           ) : (
-            <Text style={{ color: "#bbb" }}>No image available</Text>
+            <ActivityIndicator color="#bbb" />
           )}
         </View>
 
         {(centerLL || areaSqm != null) && (
-          <View
-            style={{
-              backgroundColor: "#0b1220",
-              borderRadius: 12,
-              padding: 12,
-              borderWidth: 1,
-              borderColor: "#1f2a44",
-              gap: 6,
-            }}
-          >
+          <View style={styles.metadataBox}>
             {centerLL && (
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={styles.rowCenter}>
                 {centerIcon}
-                <Text style={{ color: "#c7d2fe" }}>
+                <Text
+                  style={styles.metadataText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   Center: {centerLL.latitude.toFixed(6)},{" "}
                   {centerLL.longitude.toFixed(6)}
                 </Text>
               </View>
             )}
             {areaSqm != null && (
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={styles.rowCenter}>
                 {areaIcon}
-                <Text style={{ color: "#bbf7d0" }}>
+                <Text
+                  style={styles.metadataText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   Area: {areaSqm.toLocaleString()} m² ({areaHa?.toFixed(2)} ha)
                 </Text>
               </View>
@@ -290,153 +227,49 @@ export default function ResultPage() {
           </View>
         )}
 
-        {(octant || bounds) && (
-          <View
-            style={{
-              backgroundColor: "#0c101a",
-              borderRadius: 12,
-              padding: 12,
-              borderWidth: 1,
-              borderColor: "#1a2a3f",
-              gap: 6,
-            }}
-          >
-            <Text style={{ color: "#93c5fd", fontWeight: "700" }}>
-              Tile metadata
-            </Text>
-            {octant && (
-              <Text style={{ color: "#cbd5e1" }}>octant: {String(octant)}</Text>
-            )}
-            {bounds && (
-              <Text style={{ color: "#cbd5e1" }}>
-                bounds: N {bounds.north.toFixed(6)} · S{" "}
-                {bounds.south.toFixed(6)} · W {bounds.west.toFixed(6)} · E{" "}
-                {bounds.east.toFixed(6)}
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* Weather */}
-        <View
-          style={{
-            backgroundColor: "#09111c",
-            borderRadius: 12,
-            padding: 12,
-            borderWidth: 1,
-            borderColor: "#10243e",
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
+        <View style={styles.weatherBox}>
+          <View style={styles.rowCenter}>
             <MaterialCommunityIcons
               name={wxPack.name as any}
-              size={22}
+              size={24}
               color="#93c5fd"
             />
-            <Text
-              style={{ color: "#93c5fd", fontWeight: "700", marginLeft: 8 }}
-            >
-              Weather now
-            </Text>
+            <Text style={styles.weatherTitle}>Current Weather</Text>
           </View>
           {wxErr ? (
-            <Text style={{ color: "#fecaca" }}>Weather: {wxErr}</Text>
+            <Text style={styles.errorTextSmall}>{wxErr}</Text>
           ) : wx ? (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
+            <View style={styles.weatherDetails}>
+              <View style={styles.rowCenter}>
                 <MaterialCommunityIcons
                   name="thermometer"
-                  size={18}
+                  size={20}
                   color="#fca5a5"
                 />
-                <Text style={{ color: "#fff" }}>
+                <Text style={styles.weatherText}>
                   {wx.temperature?.toFixed(1)}°C
                 </Text>
               </View>
               {wx.apparent != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
+                <View style={styles.rowCenter}>
                   <MaterialCommunityIcons
                     name="thermometer-lines"
-                    size={18}
+                    size={20}
                     color="#fda4af"
                   />
-                  <Text style={{ color: "#e5e7eb" }}>
-                    Feels {wx.apparent.toFixed(1)}°C
+                  <Text style={styles.weatherText}>
+                    Feels like {wx.apparent.toFixed(1)}°C
                   </Text>
                 </View>
               )}
               {wx.humidity != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
+                <View style={styles.rowCenter}>
                   <MaterialCommunityIcons
                     name="water-percent"
-                    size={18}
+                    size={20}
                     color="#86efac"
                   />
-                  <Text style={{ color: "#e5e7eb" }}>{wx.humidity}% RH</Text>
-                </View>
-              )}
-              {wx.cloudcover != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="weather-cloudy"
-                    size={18}
-                    color="#a7f3d0"
-                  />
-                  <Text style={{ color: "#e5e7eb" }}>
-                    {wx.cloudcover}% clouds
-                  </Text>
-                </View>
-              )}
-              {wx.precipitation != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="weather-pouring"
-                    size={18}
-                    color="#93c5fd"
-                  />
-                  <Text style={{ color: "#e5e7eb" }}>
-                    {wx.precipitation} mm
-                  </Text>
-                </View>
-              )}
-              {wx.windspeed != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="weather-windy"
-                    size={18}
-                    color="#60a5fa"
-                  />
-                  <Text style={{ color: "#e5e7eb" }}>{wx.windspeed} km/h</Text>
-                </View>
-              )}
-              {wx.winddirection != null && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="navigation-variant"
-                    size={18}
-                    color="#fde68a"
-                  />
-                  <Text style={{ color: "#e5e7eb" }}>{wx.winddirection}°</Text>
+                  <Text style={styles.weatherText}>{wx.humidity}% RH</Text>
                 </View>
               )}
             </View>
@@ -445,100 +278,182 @@ export default function ResultPage() {
           )}
         </View>
 
-        {/* Actions */}
-        <View style={{ flexDirection: "row", gap: 12 }}>
+        <View style={styles.buttonRow}>
           <Pressable
-            onPress={() => router.push("/(tabs)/maps" as Href)}
-            style={{
-              flex: 1,
-              backgroundColor: "#374151",
-              paddingVertical: 14,
-              borderRadius: 12,
-              alignItems: "center",
-            }}
+            onPress={() => router.back()}
+            style={[styles.button, styles.buttonBack]}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>
-              Back to map
-            </Text>
+            <Text style={styles.buttonText}>Back to Map</Text>
           </Pressable>
-
           <Pressable
-            disabled={loading || !decodedUri}
+            disabled={loading || !polygonPoints}
             onPress={sendToAI}
-            style={{
-              flex: 1,
-              backgroundColor: loading || !decodedUri ? "#4b5563" : "#16a34a",
-              paddingVertical: 14,
-              borderRadius: 12,
-              alignItems: "center",
-            }}
+            style={[
+              styles.button,
+              loading || !polygonPoints
+                ? styles.buttonDisabled
+                : styles.buttonSubmit,
+            ]}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: "#fff", fontWeight: "700" }}>
-                Submit analysis
-              </Text>
+              <Text style={styles.buttonSubmitText}>Re-analyze</Text>
             )}
           </Pressable>
         </View>
 
-        {/* AI result */}
-        {err && (
-          <View
-            style={{
-              backgroundColor: "#451a1a",
-              borderRadius: 12,
-              padding: 12,
-              borderWidth: 1,
-              borderColor: "#7f1d1d",
-            }}
-          >
-            <Text style={{ color: "#fecaca" }}>Error: {err}</Text>
+        {err && !loading && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>Error: {err}</Text>
           </View>
         )}
         {count != null && (
-          <View
-            style={{
-              backgroundColor: "#112615",
-              borderRadius: 12,
-              padding: 14,
-              borderWidth: 1,
-              borderColor: "#14532d",
-              gap: 6,
-            }}
-          >
-            <Text style={{ color: "#6ee7b7", fontSize: 14 }}>AI result</Text>
-            <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>
-              {count.toFixed(0)} trees
-            </Text>
+          <View style={styles.resultBox}>
+            <Text style={styles.resultTitle}>AI Result</Text>
+            <Text style={styles.resultCount}>{count.toFixed(0)} trees</Text>
             {density != null && (
-              <Text style={{ color: "#d1fae5" }}>
+              <Text style={styles.resultDensity}>
                 Density: {density.toFixed(1)} trees/ha
               </Text>
             )}
           </View>
         )}
 
-        {/* Overlay */}
-        {overlayJpeg && (
-          <View
-            style={{
-              backgroundColor: "#1f2937",
-              borderRadius: 12,
-              padding: 12,
-              gap: 8,
-            }}
-          >
-            <Text style={{ color: "#9ca3af" }}>Compressed overlay (JPEG)</Text>
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${overlayJpeg}` }}
-              style={{ width: "100%", aspectRatio: 1, borderRadius: 12 }}
-              resizeMode="contain"
-            />
+        {overlayJpeg && !loading && (
+          <>
+            <Text style={styles.imageSectionTitle}>Prediction Overlay</Text>
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${overlayJpeg}` }}
+                style={styles.image}
+                resizeMode="contain"
+                onError={(e) => {
+                  console.warn(
+                    "Error loading overlay image:",
+                    e.nativeEvent.error
+                  );
+                }}
+              />
+            </View>
+          </>
+        )}
+        {loading && (
+          <View style={styles.imageContainer}>
+            <ActivityIndicator color="#bbb" size="large" />
+            <Text style={[styles.noImageText, { marginTop: 16 }]}>
+              Waiting for server result...
+            </Text>
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#0b0b0b" },
+  scrollViewContent: { padding: 20, gap: 20, paddingBottom: 40 },
+  title: {
+    color: "#ffffff",
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  imageSectionTitle: {
+    color: "#a1a1aa",
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  imageContainer: {
+    backgroundColor: "#111827",
+    borderRadius: 16,
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 250,
+  },
+  image: { width: "100%", aspectRatio: 1, borderRadius: 12 },
+  noImageText: { color: "#9ca3af", fontSize: 16, marginTop: 8 },
+  metadataBox: {
+    backgroundColor: "#0b1220",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#1f2a44",
+    gap: 12,
+  },
+  rowCenter: { flexDirection: "row", alignItems: "center" },
+  metadataText: {
+    color: "#e0e7ff",
+    marginLeft: 8,
+    flexShrink: 1,
+    fontSize: 15,
+  },
+  weatherBox: {
+    backgroundColor: "#09111c",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#10243e",
+    gap: 12,
+  },
+  weatherTitle: {
+    color: "#bfdbfe",
+    fontWeight: "700",
+    marginLeft: 10,
+    fontSize: 18,
+  },
+  weatherDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    marginTop: 4,
+  },
+  weatherText: { color: "#f3f4f6", marginLeft: 6, fontSize: 16 },
+  errorTextSmall: { color: "#fecaca", fontSize: 14 },
+  buttonRow: { flexDirection: "row", gap: 16 },
+  button: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  buttonBack: { backgroundColor: "#374151" },
+  buttonSubmit: { backgroundColor: "#16a34a" },
+  buttonDisabled: { backgroundColor: "#4b5563" },
+  buttonText: { color: "#ffffff", fontWeight: "600", fontSize: 16 },
+  buttonSubmitText: { color: "#ffffff", fontWeight: "700", fontSize: 16 },
+  errorBox: {
+    backgroundColor: "#451a1a",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#7f1d1d",
+  },
+  errorText: { color: "#fecaca", fontSize: 16, lineHeight: 22 },
+  resultBox: {
+    backgroundColor: "#062a11",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#14532d",
+    gap: 8,
+    alignItems: "center",
+  },
+  resultTitle: {
+    color: "#a7f3d0",
+    fontSize: 18,
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  resultCount: {
+    color: "#ffffff",
+    fontSize: 40,
+    fontWeight: "800",
+    marginVertical: 8,
+  },
+  resultDensity: { color: "#d1fae5", fontSize: 18 },
+});

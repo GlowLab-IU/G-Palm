@@ -22,7 +22,7 @@ const Layout = () => {
           title: "Maps",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Foundation name="map" color="#000" size={24} />
+            <Foundation name="map" color={color} size={size} />
           ),
         }}
       />
@@ -32,7 +32,7 @@ const Layout = () => {
           title: "Result",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="storage" color="#000" size={24} />
+            <MaterialIcons name="storage" color={color} size={size} />
           ),
         }}
       />
