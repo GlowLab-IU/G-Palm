@@ -11,6 +11,8 @@
     "ios": {
       "plugins": [
         "expo-camera",
+        "expo-camera",
+        "expo-camera",
         "expo-camera"
       ],
       "supportsTablet": true,
@@ -59,6 +61,9 @@
     },
     "updates": {
       "url": "https://u.expo.dev/97fbb181-b5d0-4c67-84cf-13ade1fdcdf9"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
