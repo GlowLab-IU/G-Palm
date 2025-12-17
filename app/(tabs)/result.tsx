@@ -326,7 +326,7 @@ export default function ResultPage() {
         )}
 
         {/* 3. WEATHER BOX - Giữ nguyên 100% Logic & Style cũ */}
-        {/* <View style={styles.weatherBox}>
+        <View style={styles.weatherBox}>
           <View style={styles.rowCenter}>
             <MaterialCommunityIcons
               name={wxPack.name as any}
@@ -375,7 +375,7 @@ export default function ResultPage() {
           ) : (
             <ActivityIndicator color="#93c5fd" />
           )}
-        </View> */}
+        </View>
 
         {/* 4. SUMMARY STATS (Dữ liệu mới) */}
         {summary && !loading && (
