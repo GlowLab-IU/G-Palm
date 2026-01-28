@@ -1,50 +1,127 @@
-# Welcome to your Expo app 👋
+# 📱 Deep Palm Mobile: Smart Palm Tree Monitoring App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+![App Banner](docs/images/app.png)
+[![React Native](https://img.shields.io/badge/React_Native-0.72+-blue.svg)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-SDK_49+-black.svg)](https://expo.dev/)
+[![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue)](https://www.typescriptlang.org/)
+[![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-lightgrey)](https://expo.dev/)
 
-## Get started
+## 📖 Overview
 
-1. Install dependencies
+**Deep Palm Mobile** is the user-facing frontend of the Deep Palm ecosystem. This application empowers farmers and agricultural experts to interact directly with our Satellite AI engine.
 
-   ```bash
-   npm install
-   ```
+Through this app, users can define farm boundaries on high-resolution satellite maps, trigger analysis requests, and receive immediate agronomic insights—including tree count, density, and health status—in a matter of seconds.
 
-2. Start the app
+### 🚀 Key Features
+* **🗺️ Interactive Satellite Maps:** Integrated Google Maps/Mapbox with high-definition satellite layers.
+* **✏️ Smart Drawing Tool:** Allows users to draw precise Polygons to select specific areas for analysis.
+* **⚡ Real-time Analysis:** Connects to the Deep Palm Backend to return results in **~1.7 seconds**.
+* **🚦 Visual Diagnostics:** Displays an intuitive "Traffic Light" overlay (Green/Red) directly on the map to signal overcrowding or optimal spacing.
+* **🆔 Digital Inventory:** detailed list of every single detected tree with exact GPS coordinates and canopy area ($m^2$).
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 📸 App Screenshots
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+| Area Selection (Drawing) | Analytics Dashboard | Health Overlay Map |
+|:------------------------:|:-------------------:|:------------------:|
+| ![Drawing](docs/images/screen_drawing.png) | ![Dashboard](docs/images/screen_dashboard.png) | ![Overlay](docs/images/screen_overlay.png) |
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🛠️ Tech Stack
 
-## Get a fresh project
+* **Core:** React Native, Expo Framework (Managed Workflow).
+* **Language:** TypeScript.
+* **State Management:** Redux Toolkit / Zustand.
+* **Maps:** `react-native-maps`, `react-native-google-places-autocomplete`.
+* **UI/Animation:** `react-native-reanimated`, `lottie-react-native`.
+* **Networking:** Axios (communicating with FastAPI Backend).
 
-When you're ready, run:
+---
 
+## ⚙️ Installation & Setup
+
+### Prerequisites
+* Node.js (LTS version).
+* Yarn or npm.
+* **Expo Go** app installed on your phone or a Simulator/Emulator.
+
+### 1. Clone the repository
 ```bash
-npm run reset-project
+git clone [https://github.com/GlowLab-IU/G-Palm]
+cd deep-palm-mobile
+
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Install Dependencies
 
-## Learn more
+```bash
+yarn install
+# or
+npm install
 
-To learn more about developing your project with Expo, look at the following resources:
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 3. Environment Configuration
 
-## Join the community
+Create a `.env` file in the root directory to store API keys and Backend URL:
 
-Join our community of developers creating universal apps.
+```env
+# AI Server URL (Local IP or Production Domain)
+EXPO_PUBLIC_API_URL=[http://192.168.1.](http://192.168.1.)X:8000
+# Google Maps API Key (For Android)
+EXPO_PUBLIC_GOOGLE_MAPS_KEY=your_google_maps_api_key
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+
+### 4. Run the Application
+
+```bash
+npx expo start
+
+```
+
+* Scan the QR code with **Expo Go** (Android) or use the Camera app (iOS).
+* Press `a` to open Android Emulator, or `i` for iOS Simulator.
+
+---
+
+## 📦 Build & Deploy (EAS)
+
+This project uses **EAS Build** for production deployment.
+
+```bash
+# Install EAS CLI
+npm install -g eas-cli
+
+# Login to Expo
+eas login
+
+# Build binary (APK/IPA)
+eas build -p android --profile preview
+eas build -p ios --profile preview
+
+```
+
+---
+
+## 🔌 API Integration
+
+The app communicates with the Backend via the following primary endpoints:
+
+* `POST /predict`: Sends Polygon coordinates, receives JSON results and Base64 Overlay image.
+* `GET /history`: Retrieves previous scan history (if implemented).
+
+---
+
+## 🤝 Contributors
+
+* **Jikey (Nguyen Nhat Truong)** - Lead Mobile & System Architect
+* **Thinh (Pham Le Duc Thinh)** - AI Research & Integration Support
+* **Kiet (Do Anh Kiet)** - Data Visualization
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.

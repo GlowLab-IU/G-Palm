@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // --- CONFIG ---
-const API_URL = "https://91tnmr9n-8000.asse.devtunnels.ms/predict";
+const API_URL = "/predict";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
@@ -412,8 +412,8 @@ export default function ResultPage() {
               agriData.action === "PLANT_MORE"
                 ? styles.borderYellow
                 : agriData.action === "THINNING"
-                ? styles.borderRed
-                : styles.borderGreen,
+                  ? styles.borderRed
+                  : styles.borderGreen,
             ]}
           >
             <View style={styles.rowCenter}>
